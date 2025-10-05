@@ -4,10 +4,11 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 #[derive(Serialize, Debug)]
 pub struct Block {
-    index: i32,
+    pub index: i32,
     timestamp: u64,
-    transactions: Vec<String>,
-    previous_hash: String,
+    pub transactions: Vec<String>,
+    pub previous_hash: String,
+    #[serde(skip)]
     pub hash: String,
 }
 
@@ -24,12 +25,12 @@ impl Block {
         Self { hash, ..tmp }
     }
 
-    pub fn get_hash(&self) -> String {
-        self.hash.clone()
+    pub fn get_hash(&self) -> &str {
+        &self.hash
     }
 
-    pub fn set_prev_hash(&mut self, new_hash: String) {
-        self.previous_hash = new_hash;
+    pub fn set_prev_hash(&mut self, new_hash: &str) {
+        self.previous_hash = new_hash.to_string();
     }
 
     fn calculate_current_time() -> Option<u64> {

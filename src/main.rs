@@ -8,15 +8,15 @@ fn main() {
     bc.add_block(Block::new(
         1,
         vec!["Alice->Bob:100".to_string()],
-        bc.get_latest_block().hash.clone(),
+        String::new(),
     ));
     bc.add_block(Block::new(
         2,
         vec!["Blob->Charlie:26".to_string()],
-        bc.get_latest_block().hash.clone(),
+        String::new(),
     ));
-
-    for b in bc.chains {
-        println!("{:#?}", b);
-    }
+    println!("{:?}", bc.is_valid());
+    //tamper transaction
+    bc.chains[1].transactions = vec!["Bob->Charlie:200".to_string()];
+    println!("{:?}", bc.is_valid());
 }

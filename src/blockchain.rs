@@ -24,4 +24,21 @@ impl Blockchain {
         new_block.hash = new_block.calculate_hash();
         self.chains.push(new_block);
     }
+
+    pub fn is_valid(&self) -> (bool, String) {
+        for i in 1..self.chains.len() {
+            let current = &self.chains[i];
+            let previous = &self.chains[i - 1];
+            if current.hash != current.calculate_hash() {
+                return (false, format!("Block {} has invalid hash", i));
+            }
+            if current.previous_hash != previous.hash {
+                return (false, format!("Block {} previous hash mismatch", i));
+            }
+            if current.index != previous.index + 1 {
+                return (false, format!("Block {} index error", i));
+            }
+        }
+        (true, String::from("Looks good."))
+    }
 }
