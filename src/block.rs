@@ -8,7 +8,7 @@ pub struct Block {
     timestamp: u64,
     transactions: Vec<String>,
     previous_hash: String,
-    hash: String,
+    pub hash: String,
 }
 
 impl Block {
@@ -28,6 +28,10 @@ impl Block {
         self.hash.clone()
     }
 
+    pub fn set_prev_hash(&mut self, new_hash: String) {
+        self.previous_hash = new_hash;
+    }
+
     fn calculate_current_time() -> Option<u64> {
         let current_time = SystemTime::now();
         let since_the_epoch = current_time.duration_since(UNIX_EPOCH).ok()?;
@@ -36,7 +40,7 @@ impl Block {
         Some(in_ms)
     }
 
-    fn calculate_hash(&self) -> String {
+    pub fn calculate_hash(&self) -> String {
         let block_string = serde_json::to_string(&self).unwrap();
         let mut hasher = Sha256::new();
         hasher.update(block_string.as_bytes());

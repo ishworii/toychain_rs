@@ -1,10 +1,22 @@
-mod block;
+use crate::{block::Block, blockchain::Blockchain};
 
-use block::Block;
+mod block;
+mod blockchain;
 
 fn main() {
-    let txs = vec!["Alice->Bob:100".to_string(), "Bob->Charlie:20".to_string()];
-    let block = Block::new(1, txs, "000000".to_string());
-    println!("{:?}", block);
-    println!("Block hash : {}", block.get_hash());
+    let mut bc = Blockchain::new();
+    bc.add_block(Block::new(
+        1,
+        vec!["Alice->Bob:100".to_string()],
+        bc.get_latest_block().hash.clone(),
+    ));
+    bc.add_block(Block::new(
+        2,
+        vec!["Blob->Charlie:26".to_string()],
+        bc.get_latest_block().hash.clone(),
+    ));
+
+    for b in bc.chains {
+        println!("{:#?}", b);
+    }
 }
