@@ -12,7 +12,22 @@ fn main() {
     ));
     bc.add_block(Block::new(
         2,
-        vec!["Blob->Charlie:26".to_string()],
+        vec!["Bob->Charlie:26".to_string()],
+        String::new(),
+    ));
+    bc.add_block(Block::new(
+        3,
+        vec!["Charlie->Dave:50".to_string()],
+        String::new(),
+    ));
+    bc.add_block(Block::new(
+        4,
+        vec!["Dave->Eve:75".to_string()],
+        String::new(),
+    ));
+    bc.add_block(Block::new(
+        5,
+        vec!["Eve->Alice:30".to_string()],
         String::new(),
     ));
     println!("{:?}", bc.is_valid());

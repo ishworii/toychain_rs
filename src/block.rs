@@ -1,6 +1,8 @@
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 use std::time::{SystemTime, UNIX_EPOCH};
+use rayon::prelude::*;
+use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
 
 #[derive(Serialize, Debug)]
 pub struct Block {
@@ -67,7 +69,7 @@ impl Block {
     }
 
     pub fn mine(&mut self, difficulty: u32) {
-        let mut attempts = 0;
+        let display_len = (difficulty + 6) as usize;
         let start = Self::calculate_current_time().unwrap();
 
         // Pre-hash everything except the nonce
@@ -82,47 +84,95 @@ impl Block {
         // Calculate how many leading zero bits we need
         let required_zeros = difficulty as usize;
 
-        loop {
-            // Clone the pre-hashed state and add only the nonce
-            let mut hasher = base_hasher.clone();
-            hasher.update(&self.nonce.to_le_bytes());
-            let hash_bytes: [u8; 32] = hasher.finalize().into();
+        // Atomic flags for thread coordination
+        let found = AtomicBool::new(false);
+        let attempts = AtomicI32::new(0);
 
-            attempts += 1;
+        // Define chunk size - smaller for better early exit, larger for less overhead
+        const CHUNK_SIZE: i32 = 50_000;
+        const CHECK_INTERVAL: i32 = 1000; // Check for early exit every N iterations
 
-            // Check if we have enough leading zeros (in hex representation)
-            // Each byte gives us 2 hex digits
-            let mut leading_zeros = 0;
-            for byte in hash_bytes.iter() {
-                if *byte == 0 {
-                    leading_zeros += 2;
-                } else {
-                    // Check high nibble
-                    if byte >> 4 == 0 {
-                        leading_zeros += 1;
-                    }
-                    break;
+        // Parallel search using Rayon
+        let result = (0..i32::MAX).into_par_iter()
+            .step_by(CHUNK_SIZE as usize)
+            .find_map_any(|chunk_start| {
+                // Early exit if another thread found it
+                if found.load(Ordering::Relaxed) {
+                    return None;
                 }
-            }
 
-            if leading_zeros >= required_zeros {
-                // Found it! Convert to string for storage
-                self.hash = hex::encode(hash_bytes);
-                break;
-            }
+                let mut local_attempts = 0;
 
-            self.nonce += 1;
+                // Process this chunk
+                for nonce in chunk_start..(chunk_start + CHUNK_SIZE) {
+                    // Check for early exit less frequently to reduce atomic overhead
+                    if local_attempts % CHECK_INTERVAL == 0 && found.load(Ordering::Relaxed) {
+                        attempts.fetch_add(local_attempts, Ordering::Relaxed);
+                        return None;
+                    }
+
+                    // Clone the pre-hashed state and add only the nonce
+                    let mut hasher = base_hasher.clone();
+                    hasher.update(&nonce.to_le_bytes());
+                    let hash_bytes: [u8; 32] = hasher.finalize().into();
+
+                    local_attempts += 1;
+
+                    // Fast leading zero check - early exit on first non-zero based on difficulty
+                    let required_bytes = required_zeros / 2;
+                    let mut valid = true;
+
+                    // Check full zero bytes
+                    for i in 0..required_bytes {
+                        if hash_bytes[i] != 0 {
+                            valid = false;
+                            break;
+                        }
+                    }
+
+                    // Check partial byte if needed
+                    if valid && required_zeros % 2 == 1 {
+                        if hash_bytes[required_bytes] >> 4 != 0 {
+                            valid = false;
+                        }
+                    }
+
+                    if valid {
+                        // Found it! Signal other threads and store the result
+                        found.store(true, Ordering::Relaxed);
+                        attempts.fetch_add(local_attempts, Ordering::Relaxed);
+                        return Some((nonce, hash_bytes));
+                    }
+                }
+
+                // Update attempts count for this chunk
+                attempts.fetch_add(local_attempts, Ordering::Relaxed);
+                None
+            });
+
+        // If we found a solution, the result will contain the nonce and hash
+        if let Some((nonce, hash_bytes)) = result {
+            self.nonce = nonce;
+            self.hash = hex::encode(hash_bytes);
         }
 
         let elapsed = Self::calculate_current_time().unwrap() - start;
         let elapsed_sec = elapsed as f64 / 1000.0;
-        let rate = if elapsed != 0 { attempts as f64 / elapsed_sec } else { 0.0 };
+        let total_attempts = attempts.load(Ordering::Relaxed);
+        let rate = if elapsed != 0 { total_attempts as f64 / elapsed_sec } else { 0.0 };
+        let rate_millions = rate / 1_000_000.0;
+
+        let hash_display = if self.hash.len() > display_len {
+            &self.hash[..display_len]
+        } else {
+            &self.hash
+        };
 
         println!("Block {} mined!", self.index);
-        println!("  Hash: {}", self.hash);
+        println!("  Hash: {}...", hash_display);
         println!("  Nonce: {}", self.nonce);
-        println!("  Attempts: {}", attempts);
+        println!("  Attempts: {}", total_attempts);
         println!("  Time: {:.2} sec", elapsed_sec);
-        println!("  Hash rate: {:.0} hashes/sec", rate);
+        println!("  Hash rate: {:.2}M hashes/sec", rate_millions);
     }
 }
